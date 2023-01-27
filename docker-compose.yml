@@ -1,0 +1,58 @@
+version: '3.9'
+
+# хранилища
+volumes:
+    pgdata:
+        
+networks:
+    backend:
+
+services:
+    nginx:
+      image: nginx:latest
+      volumes:
+        - ./stocks_products/static:/app/stocks_products/static
+        - ./stocks_products/media:/app/stocks_products/media
+        - ./stocks_products/logs:/app/stocks_products/logs
+        - ./docker/nginx:/etc/nginx/conf.d
+      ports:
+        - 1337:80
+      depends_on:
+        - python
+    python:
+        restart: always
+        build:
+          context: .
+          dockerfile: docker/python/Dockerfile
+        command: gunicorn /app/stocks_products/stocks_products.wsgi:application --bind 0.0.0.0:8000 
+        volumes:
+          - ./stocks_products:/app/stocks_products
+        expose:
+          - 8000
+        depends_on:
+          - postgres
+    postgres:
+        image: postgres:13.3
+        environment:
+          DATABASE: "test"
+          USER: "testuser"
+          PASSWORD: "testpassword"
+        volumes:
+          - pgdata:/var/lib/postgresql/data      
+        ports:
+           - "5432:5432"
+        command: python /app/manage.py migrate
+        healthcheck:
+          test: ["CMD-SHELL", "pg_isready -U testuser -d test"]
+          interval: 10s
+          timeout: 5s
+          retries: 5
+          start_period: 10s
+        restart: unless-stopped
+        deploy:
+          resources:
+            limits:
+              cpus: '1'
+              memory: 4G
+        networks:
+          - backend
